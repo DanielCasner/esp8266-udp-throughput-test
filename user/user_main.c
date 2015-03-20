@@ -1,3 +1,5 @@
+#include "mem.h"
+#include "c_types.h"
 #include "ets_sys.h"
 #include "osapi.h"
 #include "gpio.h"
@@ -19,7 +21,7 @@ loop(os_event_t *events)
     system_os_post(user_procTaskPrio, 0, 0 );
 }
 
-//Init function 
+//Init function
 void ICACHE_FLASH_ATTR
 user_init()
 {

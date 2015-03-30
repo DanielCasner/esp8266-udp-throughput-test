@@ -27,10 +27,9 @@ user_init()
 {
     char ssid[32] = SSID;
     char password[64] = SSID_PASSWORD;
-    struct station_config stationConf;
 
     //Set station mode
-    wifi_set_opmode( 0x1 );
+    wifi_set_opmode(SOFT_APMODE);
 
     //Set ap settings
     os_memcpy(&stationConf.ssid, ssid, 32);

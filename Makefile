@@ -10,7 +10,7 @@ SRCS:=user/user_main.c
 GCC_FOLDER:=/home/dc/esp8266/xtensa-toolchain-build/build-lx106
 ESPTOOL_PY:=/home/dc/esp8266/esptool/esptool.py
 FW_TOOL:=/home/dc/esp8266/other/esptool/esptool
-SDK:=/home/dc/esp8266/esp_iot_sdk_v0.9.3
+SDK:=/home/dc/esp8266/esp_iot_sdk_v1.0.0
 PORT:=/dev/ttyUSB0
 #PORT:=/dev/ttyACM0
 

@@ -58,7 +58,7 @@ user_init()
     REG_SET_BIT(0x3ff00014, BIT(0));
     os_update_cpu_frequency(160);
 
-    uart_div_modify(0, UART_CLK_FREQ / 115200);
+    uart_div_modify(0, UART_CLK_FREQ / 3000000);
 
     os_delay_us(1000000);
 

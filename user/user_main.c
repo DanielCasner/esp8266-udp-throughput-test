@@ -12,9 +12,8 @@
 #define user_procTaskPrio        0
 #define user_procTaskQueueLen    1
 os_event_t    user_procTaskQueue[user_procTaskQueueLen];
-static void loop(os_event_t *events);
 
-static volatile os_timer_t some_timer;
+static volatile os_timer_t userTimer;
 static struct espconn *pUdpServer;
 struct espconn *pespconn = NULL;
 
@@ -22,13 +21,17 @@ struct espconn *pespconn = NULL;
 static void ICACHE_FLASH_ATTR
 loop(os_event_t *events)
 {
-  char msg[1400]="I--DOWN THE RABBIT-HOLE\n\n\nAlice was beginning to get very tired of sitting by her sister on the\nbank, and of having nothing to do. Once or twice she had peeped into the\nbook her sister was reading, but it had no pictures or conversations in\nit, 'and what is the use of a book,' thought Alice, 'without pictures or\nconversations?'\n\nSo she was considering in her own mind (as well as she could, for the\nday made her feel very sleepy and stupid), whether the pleasure of\nmaking a daisy-chain would be worth the trouble of getting up and\npicking the daisies, when suddenly a White Rabbit with pink eyes ran\nclose by her.\n\nThere was nothing so very remarkable in that, nor did Alice think it so\nvery much out of the way to hear the Rabbit say to itself, 'Oh dear! Oh\ndear! I shall be too late!' But when the Rabbit actually took a watch\nout of its waistcoat-pocket and looked at it and then hurried on, Alice\nstarted to her feet, for it flashed across her mind that she had never\nbefore seen a rabbit with either a waistcoat-pocket, or a watch to take\nout of it, and, burning with curiosity, she ran across the field after\nit and was just in time to see it pop down a large rabbit-hole, under\nthe hedge. In another moment, down went Alice after it!\n\n[Illustration]\n\nThe rabbit-hole went straight on like a tunnel for some way and then\ndipped suddenly down, so suddenly that Alice had not a moment to think";
+  system_os_post(user_procTaskPrio, 0, 0 );
+}
 
+// Interval Task
+static void ICACHE_FLASH_ATTR
+interval(void)
+{
+  static uint8 msg[1400]="I--DOWN THE RABBIT-HOLE\n\n\nAlice was beginning to get very tired of sitting by her sister on the\nbank, and of having nothing to do. Once or twice she had peeped into the\nbook her sister was reading, but it had no pictures or conversations in\nit, 'and what is the use of a book,' thought Alice, 'without pictures or\nconversations?'\n\nSo she was considering in her own mind (as well as she could, for the\nday made her feel very sleepy and stupid), whether the pleasure of\nmaking a daisy-chain would be worth the trouble of getting up and\npicking the daisies, when suddenly a White Rabbit with pink eyes ran\nclose by her.\n\nThere was nothing so very remarkable in that, nor did Alice think it so\nvery much out of the way to hear the Rabbit say to itself, 'Oh dear! Oh\ndear! I shall be too late!' But when the Rabbit actually took a watch\nout of its waistcoat-pocket and looked at it and then hurried on, Alice\nstarted to her feet, for it flashed across her mind that she had never\nbefore seen a rabbit with either a waistcoat-pocket, or a watch to take\nout of it, and, burning with curiosity, she ran across the field after\nit and was just in time to see it pop down a large rabbit-hole, under\nthe hedge. In another moment, down went Alice after it!\n\n[Illustration]\n\nThe rabbit-hole went straight on like a tunnel for some way and then\ndipped suddenly down, so suddenly that Alice had not a moment to think";
   if (pespconn) {
     espconn_sent(pespconn, msg, 1400);
   }
-
-  system_os_post(user_procTaskPrio, 0, 0 );
 }
 
 //Called when new packet comes in.
@@ -132,7 +135,12 @@ user_init()
       os_printf("Successfully created UDP server\r\n");
     }
 
+    // Start Timer
+    os_timer_disarm(&userTimer);
+    os_timer_setfn(&userTimer, (os_timer_func_t*)interval, NULL);
+    os_timer_arm(&userTimer, 1, 1);
+
     //Start os task
-    system_os_task(loop, user_procTaskPrio,user_procTaskQueue, user_procTaskQueueLen);
-    system_os_post(user_procTaskPrio, 0, 0 );
+    //system_os_task(loop, user_procTaskPrio,user_procTaskQueue, user_procTaskQueueLen);
+    //system_os_post(user_procTaskPrio, 0, 0 );
 }

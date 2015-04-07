@@ -7,6 +7,7 @@
 #include "user_config.h"
 #include "user_interface.h"
 #include "espconn.h"
+#include "uart.h"
 
 
 #define user_procTaskPrio        0
@@ -16,6 +17,26 @@ os_event_t    user_procTaskQueue[user_procTaskQueueLen];
 static volatile os_timer_t userTimer;
 static struct espconn *pUdpServer;
 struct espconn *pespconn = NULL;
+
+#define NUM_RTX_BUFS 2
+#define MTU 1500
+
+typedef enum
+{
+  BUF_IDLE,
+  BUF_WR,
+  BUF_RD
+} RadioTXBufferState;
+
+typedef struct
+{
+  uint16 len;
+  uint8 data[1500];
+  RadioRXBufferState state;
+} RadioTXBuffer;
+
+static RadioTXBuffer rtxbs[NUM_RTX_BUFS];
+static RadioTXBuffer* rtxQ[NUM_RTX_BUFS];
 
 //Idle task
 static void ICACHE_FLASH_ATTR
@@ -28,10 +49,125 @@ loop(os_event_t *events)
 static void ICACHE_FLASH_ATTR
 interval(void)
 {
-  static uint8 msg[1400]="I--DOWN THE RABBIT-HOLE\n\n\nAlice was beginning to get very tired of sitting by her sister on the\nbank, and of having nothing to do. Once or twice she had peeped into the\nbook her sister was reading, but it had no pictures or conversations in\nit, 'and what is the use of a book,' thought Alice, 'without pictures or\nconversations?'\n\nSo she was considering in her own mind (as well as she could, for the\nday made her feel very sleepy and stupid), whether the pleasure of\nmaking a daisy-chain would be worth the trouble of getting up and\npicking the daisies, when suddenly a White Rabbit with pink eyes ran\nclose by her.\n\nThere was nothing so very remarkable in that, nor did Alice think it so\nvery much out of the way to hear the Rabbit say to itself, 'Oh dear! Oh\ndear! I shall be too late!' But when the Rabbit actually took a watch\nout of its waistcoat-pocket and looked at it and then hurried on, Alice\nstarted to her feet, for it flashed across her mind that she had never\nbefore seen a rabbit with either a waistcoat-pocket, or a watch to take\nout of it, and, burning with curiosity, she ran across the field after\nit and was just in time to see it pop down a large rabbit-hole, under\nthe hedge. In another moment, down went Alice after it!\n\n[Illustration]\n\nThe rabbit-hole went straight on like a tunnel for some way and then\ndipped suddenly down, so suddenly that Alice had not a moment to think";
-  if (pespconn) {
-    espconn_sent(pespconn, msg, 1400);
+
+}
+
+void ICACHE_FLASH_ATTR
+uart0_recvCB()
+{
+  static uint32 serRxLen = 0;
+  static uint8 phase = 0;
+  static uint8 which = 0;
+  uint8 byte = 0;
+
+  while (READ_PERI_REG(UART_STATUS(UART0)) & (UART_RXFIFO_CNT << UART_RXFIFO_CNT_S))
+  {
+    byte = READ_PERI_REG(UART_FIFO(UART0)) & 0xFF;
+    switch (phase)
+    {
+      case 0: // Header byte 1
+      {
+        if (byte == 0xbe) phase++;
+        break
+      }
+      case 1: // Header byte 2
+      {
+        if (byte == 0xef) phase++;
+        else phase = 0;
+        break;
+      }
+      case 3: // Packet length, 4 bytes
+      {
+        serRxLen  = (byte <<  0);
+        phase++;
+        break;
+      }
+      case 4:
+      {
+        serRxLen |= (byte <<  8);
+        phase++;
+        break;
+      }
+      case 5:
+      {
+        serRxLen |= (byte << 16);
+        phase++;
+        break;
+      }
+      case 6:
+      {
+        serRxLen |= (byte << 24);
+        if (serRxLen < MTU) phase++;
+        else phase = 0; // Got an invalid length, have to throw out the packet
+        break;
+      }
+      case 7: // Start of payload
+      {
+        // Check if we have somewhere to send this data
+        if (pespconn == NULL) { // Nope
+          phase = 0;
+          break;
+        }
+        else
+        {
+          // Select buffer to write into
+          for (which = 0; which < NUM_RTX_BUFS; ++which)
+          {
+            if (rtxbs[which] == BUF_IDLE) break;
+          }
+          if (which == NUM_RTX_BUFS) // No available buffer
+          {
+            phase = 0;
+            break;
+          }
+          else
+          {
+            rtxbs[which].len = 0;
+            rtxbs[which].state = BUF_WR;
+            phase++;
+          }
+        }
+        // No break, explicit fall through to next case
+      }
+      case 8:
+      {
+        rtxbs[which].data[rtxbs[which].len++] = byte;
+        if (rtxbs[which].len++ >= serRxLen)
+        {
+          for(uint8 i=0; i<NUM_RTX_BUFS; ++i)
+          {
+            if (rtxQ[i] == NULL) {
+              rtxQ[i] = &(rtxbs[which]);
+              break;
+            }
+          }
+          rtxbs[which].state = BUF_RD;
+          espconn_sent(pespconn, rtxbs[which].data, rtxbs[which].len);
+          phase = 0;
+        }
+        break;
+      }
+      default:
+      {
+        phase = 0;
+      }
+    }
   }
+}
+
+static void ICACHE_FLASH_ATTR
+udpserver_sent_cb(void* arg)
+{
+  if (rtxQ[0] != NULL)
+  {
+    rtxQ[0]->len = 0;
+    rtxQ[0]->state = BUF_IDLE;
+    for (uint8 i=1; i<NUM_RTX_BUFS)
+    {
+      rtxQ[i-1] = rtxQ[i];
+    }
+  }
+  // Else handle error
 }
 
 //Called when new packet comes in.
@@ -41,28 +177,29 @@ udpserver_recv(void *arg, char *pusrdata, unsigned short len)
   char err = 0;
   pespconn = (struct espconn *)arg;
 
-  REG_SET_BIT(0x3ff00014, BIT(0)); // Make sure we're still at speed
-  //os_update_cpu_frequency(160);
-
-  err = espconn_sent(pespconn, pusrdata, len);
-
-  //os_printf("Received %d bytes and responded %d\r\n", len, err);
+  espconn_register_sentcb(pespconn, udpserver_sent_cb);
 }
 
 //Init function
 void ICACHE_FLASH_ATTR
 user_init()
 {
-    char err;
+    uint32 i;
+    int8 err;
 
     REG_SET_BIT(0x3ff00014, BIT(0));
     os_update_cpu_frequency(160);
 
-    uart_div_modify(0, UART_CLK_FREQ / 3000000);
-
-    os_delay_us(1000000);
-
     os_printf("\r\nBooting up...\r\n");
+
+    for (i=0; i<NUM_RTX_BUFS; ++i)
+    {
+      rtxbs[i].len = 0;
+      rtxbs[i].state = BUF_IDLE;
+      rtxQ[i] = NULL;
+    }
+
+    uart_init(BIT_RATE_3000000, BIT_RATE_9600);
 
     // Create config for Wifi AP
     struct softap_config ap_config;
@@ -136,9 +273,9 @@ user_init()
     }
 
     // Start Timer
-    os_timer_disarm(&userTimer);
-    os_timer_setfn(&userTimer, (os_timer_func_t*)interval, NULL);
-    os_timer_arm(&userTimer, 1, 1);
+    //os_timer_disarm(&userTimer);
+    //os_timer_setfn(&userTimer, (os_timer_func_t*)interval, NULL);
+    //os_timer_arm(&userTimer, 1, 1);
 
     //Start os task
     //system_os_task(loop, user_procTaskPrio,user_procTaskQueue, user_procTaskQueueLen);

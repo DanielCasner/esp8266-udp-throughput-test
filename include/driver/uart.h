@@ -39,7 +39,9 @@ typedef enum {
     BIT_RATE_115200 = 115200,
     BIT_RATE_230400 = 230400,
     BIT_RATE_460800 = 460800,
-    BIT_RATE_921600 = 921600
+    BIT_RATE_921600 = 921600,
+    BIT_RATE_1000000 = 1000000,
+    BIT_RATE_3000000 = 3000000,
 } UartBautRate;
 
 typedef enum {
@@ -93,4 +95,3 @@ typedef struct {
 void uart_init(UartBautRate uart0_br, UartBautRate uart1_br);
 
 #endif
-

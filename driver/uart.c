@@ -103,6 +103,8 @@ uart1_write_char(char c)
     }
 }
 
+extern void uart0_recvCB(void);
+
 /******************************************************************************
  * FunctionName : uart0_rx_intr_handler
  * Description  : Internal used function
@@ -116,14 +118,16 @@ uart0_rx_intr_handler(void *para)
     /* uart0 and uart1 intr combine togther, when interrupt occur, see reg 0x3ff20020, bit2, bit0 represents
      * uart1 and uart0 respectively
      */
-    RcvMsgBuff *pRxBuff = (RcvMsgBuff *)para;
-    uint8 RcvChar;
 
     if (UART_RXFIFO_FULL_INT_ST != (READ_PERI_REG(UART_INT_ST(UART0)) & UART_RXFIFO_FULL_INT_ST)) {
         return;
     }
+    else {
+      uart0_recvCB();
+      WRITE_PERI_REG(UART_INT_CLR(UART0), UART_RXFIFO_FULL_INT_CLR);
+    }
 
-    WRITE_PERI_REG(UART_INT_CLR(UART0), UART_RXFIFO_FULL_INT_CLR);
+
 
     while (READ_PERI_REG(UART_STATUS(UART0)) & (UART_RXFIFO_CNT << UART_RXFIFO_CNT_S)) {
         RcvChar = READ_PERI_REG(UART_FIFO(UART0)) & 0xFF;
@@ -184,4 +188,3 @@ uart_init(UartBautRate uart0_br, UartBautRate uart1_br)
     // install uart1 putc callback
     os_install_putc1((void *)uart1_write_char);
 }
-

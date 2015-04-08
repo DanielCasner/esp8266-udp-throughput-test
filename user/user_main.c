@@ -7,7 +7,7 @@
 #include "user_config.h"
 #include "user_interface.h"
 #include "espconn.h"
-#include "uart.h"
+#include "driver/uart.h"
 
 
 #define user_procTaskPrio        0
@@ -32,7 +32,7 @@ typedef struct
 {
   uint16 len;
   uint8 data[1500];
-  RadioRXBufferState state;
+  RadioTXBufferState state;
 } RadioTXBuffer;
 
 static RadioTXBuffer rtxbs[NUM_RTX_BUFS];
@@ -59,16 +59,17 @@ uart0_recvCB()
   static uint8 phase = 0;
   static uint8 which = 0;
   uint8 byte = 0;
+  uint8 i;
 
-  while (READ_PERI_REG(UART_STATUS(UART0)) & (UART_RXFIFO_CNT << UART_RXFIFO_CNT_S))
+  while (READ_PERI_REG(UART_STATUS(0)) & (UART_RXFIFO_CNT << UART_RXFIFO_CNT_S))
   {
-    byte = READ_PERI_REG(UART_FIFO(UART0)) & 0xFF;
+    byte = READ_PERI_REG(UART_FIFO(0)) & 0xFF;
     switch (phase)
     {
       case 0: // Header byte 1
       {
         if (byte == 0xbe) phase++;
-        break
+        break;
       }
       case 1: // Header byte 2
       {
@@ -113,7 +114,7 @@ uart0_recvCB()
           // Select buffer to write into
           for (which = 0; which < NUM_RTX_BUFS; ++which)
           {
-            if (rtxbs[which] == BUF_IDLE) break;
+            if (rtxbs[which].state == BUF_IDLE) break;
           }
           if (which == NUM_RTX_BUFS) // No available buffer
           {
@@ -134,7 +135,7 @@ uart0_recvCB()
         rtxbs[which].data[rtxbs[which].len++] = byte;
         if (rtxbs[which].len++ >= serRxLen)
         {
-          for(uint8 i=0; i<NUM_RTX_BUFS; ++i)
+          for(i=0; i<NUM_RTX_BUFS; ++i)
           {
             if (rtxQ[i] == NULL) {
               rtxQ[i] = &(rtxbs[which]);
@@ -158,11 +159,12 @@ uart0_recvCB()
 static void ICACHE_FLASH_ATTR
 udpserver_sent_cb(void* arg)
 {
+  uint8 i;
   if (rtxQ[0] != NULL)
   {
     rtxQ[0]->len = 0;
     rtxQ[0]->state = BUF_IDLE;
-    for (uint8 i=1; i<NUM_RTX_BUFS)
+    for (i=1; i<NUM_RTX_BUFS; ++i)
     {
       rtxQ[i-1] = rtxQ[i];
     }
@@ -177,7 +179,7 @@ udpserver_recv(void *arg, char *pusrdata, unsigned short len)
   char err = 0;
   pespconn = (struct espconn *)arg;
 
-  espconn_register_sentcb(pespconn, udpserver_sent_cb);
+  espconn_regist_sentcb(pespconn, udpserver_sent_cb);
 }
 
 //Init function
@@ -199,7 +201,9 @@ user_init()
       rtxQ[i] = NULL;
     }
 
-    uart_init(BIT_RATE_3000000, BIT_RATE_9600);
+    uart_div_modify(0, UART_CLK_FREQ / 115200);
+
+    //uart_init(BIT_RATE_921600, BIT_RATE_9600);
 
     // Create config for Wifi AP
     struct softap_config ap_config;

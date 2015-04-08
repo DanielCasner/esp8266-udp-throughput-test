@@ -126,28 +126,6 @@ uart0_rx_intr_handler(void *para)
       uart0_recvCB();
       WRITE_PERI_REG(UART_INT_CLR(UART0), UART_RXFIFO_FULL_INT_CLR);
     }
-
-
-
-    while (READ_PERI_REG(UART_STATUS(UART0)) & (UART_RXFIFO_CNT << UART_RXFIFO_CNT_S)) {
-        RcvChar = READ_PERI_REG(UART_FIFO(UART0)) & 0xFF;
-
-        /* you can add your handle code below.*/
-
-        *(pRxBuff->pWritePos) = RcvChar;
-
-        // insert here for get one command line from uart
-        if (RcvChar == '\r') {
-            pRxBuff->BuffState = WRITE_OVER;
-        }
-
-        pRxBuff->pWritePos++;
-
-        if (pRxBuff->pWritePos == (pRxBuff->pRcvMsgBuff + RX_BUFF_SIZE)) {
-            // overflow ...we may need more error handle here.
-            pRxBuff->pWritePos = pRxBuff->pRcvMsgBuff ;
-        }
-    }
 }
 
 

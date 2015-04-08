@@ -189,8 +189,10 @@ user_init()
     uint32 i;
     int8 err;
 
-    REG_SET_BIT(0x3ff00014, BIT(0));
-    os_update_cpu_frequency(160);
+    uart_div_modify(0, UART_CLK_FREQ / 115200);
+
+    //REG_SET_BIT(0x3ff00014, BIT(0));
+    //os_update_cpu_frequency(160);
 
     os_printf("\r\nBooting up...\r\n");
 
@@ -201,7 +203,6 @@ user_init()
       rtxQ[i] = NULL;
     }
 
-    uart_div_modify(0, UART_CLK_FREQ / 115200);
 
     //uart_init(BIT_RATE_921600, BIT_RATE_9600);
 

@@ -8,11 +8,10 @@ OBJS:=user/user_main.o driver/uart.o
 SRCS:=user/user_main.c driver/uart.c
 
 GCC_FOLDER:=/home/dc/esp8266/xtensa-toolchain-build/build-lx106
-ESPTOOL_PY:=/home/dc/esp8266/esptool/esptool.py
+ESPTOOL_PY:=../esptool/esptool.py
 FW_TOOL:=/home/dc/esp8266/other/esptool/esptool
-SDK:=/home/dc/esp8266/esp_iot_sdk_v1.0.0
-PORT:=/dev/ttyUSB0
-#PORT:=/dev/ttyACM0
+SDK:=/home/dc/esp8266/esp_iot_sdk_v1.0.1_b1
+PORT:=com11
 BAUD:=230400
 
 XTLIB:=$(SDK)/lib
@@ -56,7 +55,9 @@ $(FW_FILE_2): $(TARGET_OUT)
 	@echo "FW $@"
 	$(FW_TOOL) -eo $(TARGET_OUT) -es .irom0.text $@ -ec
 
-burn : $(FW_FILE_1) $(FW_FILE_2)
+build : $(FW_FILE_1) $(FW_FILE_2)
+
+burn :
 	($(ESPTOOL_PY) --port $(PORT) --baud $(BAUD) write_flash 0x00000 0x00000.bin 0x40000 0x40000.bin)||(true)
 
 clean :

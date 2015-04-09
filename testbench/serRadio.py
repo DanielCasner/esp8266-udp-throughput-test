@@ -29,14 +29,14 @@ def unpackSeqno(pkt):
 class UARTRadioConn(serial.Serial):
     "A subclass of Serial with the right parameters"
     def __init__(self, port="/dev/ttyUSB0"):
-        serial.Serial.__init__(self, port, 115200, timeout=0)
+        serial.Serial.__init__(self, port, 3000000, timeout=0)
 
 class UDPClient(socket.socket):
     "A wrapper around socket with the right parameters and some extra functionality"
     def __init__(self, host, port):
         socket.socket.__init__(self, socket.AF_INET, socket.SOCK_DGRAM)
         self.addr = host, port
-        self.setblocking = 0
+        self.setblocking(0)
 
     def connect(self):
         "Send a wakeup message to the radio to establish a UDP \"connection\""
@@ -52,6 +52,8 @@ class UDPClient(socket.socket):
 class Tester:
     "A class to administer testing"
 
+    SER_XMIT_LEN = 200
+
     def __init__(self, serial_device="/dev/ttyUSB0", udp_host="172.31.1.1", udp_port=6661, payload_length=1400):
         "Sets up the test"
         self.uart   = UARTRadioConn(serial_device)
@@ -66,17 +68,26 @@ class Tester:
     def sendOne(self):
         "Send one packet over serial"
         s, p = self.pktGen.next()
+        if len(p) > self.SER_XMIT_LEN:
+            for i in range(0, len(p), self.SER_XMIT_LEN):
+                self.uart.write(p[i:i+self.SER_XMIT_LEN])
+                time.sleep(0.25)
+        else:
+            self.uart.write(p)
         self.pktLog[s] = time.time()
-        self.uart.write(p)
+
+    def console(self, max_length=10000):
+        "Read from UART and write to console"
+        sys.stdout.write(self.uart.read(max_length))
 
     def run(self, interval=1.0):
-        "Run a test with a specified interval between packets"
+        "Run a test with a specified interval betandrween packets"
         self.connect()
         while True:
             st = time.time()
             self.sendOne()
             while (time.time()-st) < interval:
-                sys.stdout.write(self.uart.read(120))
+                self.console(120)
                 pkt = self.client.receive()
                 rt = time.time()
                 if pkt:
@@ -87,7 +98,3 @@ class Tester:
                     else:
                         sys.stdout.write("Unexpected packet: \"%s\"\r\n" % pkt)
                 time.sleep(0.0003)
-
-
-if __name__ == '__main__':
-    Tester().run()

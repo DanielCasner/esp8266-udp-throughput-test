@@ -38,6 +38,8 @@ typedef struct
 static RadioTXBuffer rtxbs[NUM_RTX_BUFS];
 static RadioTXBuffer* rtxQ[NUM_RTX_BUFS];
 
+#define user_print(message) uart0_tx_buffer(message, os_strlen(message))
+
 //Idle task
 static void ICACHE_FLASH_ATTR
 loop(os_event_t *events)
@@ -61,9 +63,12 @@ uart0_recvCB()
   uint8 byte = 0;
   uint8 i;
 
+  char dbg_text[120];
+
   while (READ_PERI_REG(UART_STATUS(0)) & (UART_RXFIFO_CNT << UART_RXFIFO_CNT_S))
   {
     byte = READ_PERI_REG(UART_FIFO(0)) & 0xFF;
+
     switch (phase)
     {
       case 0: // Header byte 1
@@ -77,36 +82,37 @@ uart0_recvCB()
         else phase = 0;
         break;
       }
-      case 3: // Packet length, 4 bytes
+      case 2: // Packet length, 4 bytes
       {
         serRxLen  = (byte <<  0);
         phase++;
         break;
       }
-      case 4:
+      case 3:
       {
         serRxLen |= (byte <<  8);
         phase++;
         break;
       }
-      case 5:
+      case 4:
       {
         serRxLen |= (byte << 16);
         phase++;
         break;
       }
-      case 6:
+      case 5:
       {
         serRxLen |= (byte << 24);
         if (serRxLen < MTU) phase++;
         else phase = 0; // Got an invalid length, have to throw out the packet
         break;
       }
-      case 7: // Start of payload
+      case 6: // Start of payload
       {
         // Check if we have somewhere to send this data
         if (pespconn == NULL) { // Nope
           phase = 0;
+          user_print("No client, dumping packet\r\n");
           break;
         }
         else
@@ -118,6 +124,7 @@ uart0_recvCB()
           }
           if (which == NUM_RTX_BUFS) // No available buffer
           {
+            user_print("No available buffer, dumping packet\r\n");
             phase = 0;
             break;
           }
@@ -130,10 +137,13 @@ uart0_recvCB()
         }
         // No break, explicit fall through to next case
       }
-      case 8:
+      case 7:
       {
+        //os_sprintf(dbg_text, "URX: 0x%02x len=%d\r\n", byte, rtxbs[which].len);
+        //user_print(dbg_text);
+
         rtxbs[which].data[rtxbs[which].len++] = byte;
-        if (rtxbs[which].len++ >= serRxLen)
+        if (rtxbs[which].len >= serRxLen)
         {
           for(i=0; i<NUM_RTX_BUFS; ++i)
           {
@@ -144,12 +154,14 @@ uart0_recvCB()
           }
           rtxbs[which].state = BUF_RD;
           espconn_sent(pespconn, rtxbs[which].data, rtxbs[which].len);
+          //user_print("Queuing UDP packet for send\r\n");
           phase = 0;
         }
         break;
       }
       default:
       {
+        user_print("UART phase default, SHOULD NEVER HAPPEN!\r\n");
         phase = 0;
       }
     }
@@ -160,6 +172,9 @@ static void ICACHE_FLASH_ATTR
 udpserver_sent_cb(void* arg)
 {
   uint8 i;
+
+  //user_print("udp sent CB\r\n");
+
   if (rtxQ[0] != NULL)
   {
     rtxQ[0]->len = 0;
@@ -179,6 +194,8 @@ udpserver_recv(void *arg, char *pusrdata, unsigned short len)
   char err = 0;
   pespconn = (struct espconn *)arg;
 
+  user_print("udp recv CB\r\n");
+
   espconn_regist_sentcb(pespconn, udpserver_sent_cb);
 }
 
@@ -189,12 +206,10 @@ user_init()
     uint32 i;
     int8 err;
 
-    uart_div_modify(0, UART_CLK_FREQ / 115200);
+    REG_SET_BIT(0x3ff00014, BIT(0));
+    os_update_cpu_frequency(160);
 
-    //REG_SET_BIT(0x3ff00014, BIT(0));
-    //os_update_cpu_frequency(160);
-
-    os_printf("\r\nBooting up...\r\n");
+    uart_div_modify(0, UART_CLK_FREQ / 3000000);
 
     for (i=0; i<NUM_RTX_BUFS; ++i)
     {
@@ -203,8 +218,12 @@ user_init()
       rtxQ[i] = NULL;
     }
 
+    //uart_div_modify(0, UART_CLK_FREQ / 3000000);
+    uart_init(BIT_RATE_3000000, BIT_RATE_9600);
 
-    //uart_init(BIT_RATE_921600, BIT_RATE_9600);
+    os_delay_us(1000000);
+
+    user_print("\r\nBooting up...\r\n");
 
     // Create config for Wifi AP
     struct softap_config ap_config;
@@ -219,22 +238,22 @@ user_init()
 
     // Setup ESP module to AP mode and apply settings
     if (wifi_set_opmode(SOFTAP_MODE)) {
-      os_printf("Successfully set up OPMODE\r\n");
+      user_print("Successfully set up OPMODE\r\n");
     }
     else {
-      os_printf("FAILED to set OPMODE\r\n");
+      user_print("FAILED to set OPMODE\r\n");
     }
     if (wifi_softap_set_config(&ap_config)) {
-      os_printf("Successfully set softap config\r\n");
+      user_print("Successfully set softap config\r\n");
     }
     else {
-      os_printf("FAILED to set softap config\r\n");
+      user_print("FAILED to set softap config\r\n");
     }
     if (wifi_set_phy_mode(PHY_MODE_11G)) {
-      os_printf("Successfully set phy mode\r\n");
+      user_print("Successfully set phy mode\r\n");
     }
     else {
-      os_printf("FAILED to set phy mode\r\n");
+      user_print("FAILED to set phy mode\r\n");
     }
 
     // Create ip config
@@ -245,18 +264,18 @@ user_init()
 
     // Assign ip config
     if (wifi_set_ip_info(SOFTAP_IF, &ipinfo)) {
-      os_printf("Successfully set IP info\r\n");
+      user_print("Successfully set IP info\r\n");
     }
     else {
-      os_printf("FAILED to set IP info\r\n");
+      user_print("FAILED to set IP info\r\n");
     }
 
     // Start DHCP server
     if (wifi_softap_dhcps_start()) {
-      os_printf("Successfully started DHCP server\r\n");
+      user_print("Successfully started DHCP server\r\n");
     }
     else {
-      os_printf("FAILED to start DHCP server\r\n");
+      user_print("FAILED to start DHCP server\r\n");
     }
 
     pUdpServer = (struct espconn *)os_zalloc(sizeof(struct espconn));
@@ -271,10 +290,10 @@ user_init()
 
     err = espconn_create( pUdpServer );
     if (err) {
-      os_printf("FAILED to create UDP server, err %d\r\n", err);
+      user_print("FAILED to create UDP server\r\n");
     }
     else {
-      os_printf("Successfully created UDP server\r\n");
+      user_print("Successfully created UDP server\r\n");
     }
 
     // Start Timer

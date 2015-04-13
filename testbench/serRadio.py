@@ -54,7 +54,7 @@ class Tester:
 
     SER_XMIT_LEN = 1500
 
-    def __init__(self, serial_device="/dev/ttyUSB0", udp_host="172.31.1.1", udp_port=6661, payload_length=1400):
+    def __init__(self, serial_device="/dev/ttyUSB0", udp_host="172.31.1.1", udp_port=6661, payload_length=1450):
         "Sets up the test"
         self.uart   = UARTRadioConn(serial_device)
         self.client = UDPClient(udp_host, udp_port)
@@ -86,10 +86,11 @@ class Tester:
         "Read from UART and write to console"
         sys.stdout.write(self.uart.read(max_length))
 
-    def run(self, interval=1.0):
+    def run(self, interval=1.0, count=65535):
         "Run a test with a specified interval betandrween packets"
         self.connect()
-        while True:
+        while count > 0:
+            count -= 1
             st = time.time()
             self.sendOne()
             while (time.time()-st) < interval:
@@ -104,3 +105,5 @@ class Tester:
                     else:
                         sys.stdout.write("Unexpected packet: \"%s\"\r\n" % pkt)
                 time.sleep(0.0003)
+        sys.stdout.write("%d packets not returned\r\n" % len(self.pktLog))
+        self.pktLog = {}

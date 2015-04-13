@@ -21,24 +21,18 @@ struct espconn *pespconn = NULL;
 #define NUM_RTX_BUFS 4
 #define MTU 1500
 
-typedef enum
-{
-  BUF_IDLE,
-  BUF_WR,
-  BUF_RD
-} RadioTXBufferState;
-
 typedef struct
 {
   uint16 len;
   uint8 data[1500];
-  RadioTXBufferState state;
+  bool queued;
 } RadioTXBuffer;
 
 static RadioTXBuffer rtxbs[NUM_RTX_BUFS];
-static RadioTXBuffer* rtxQ[NUM_RTX_BUFS];
 
 #define user_print(message) uart0_tx_buffer(message, os_strlen(message))
+
+char dbg_text[120];
 
 //Idle task
 static void ICACHE_FLASH_ATTR
@@ -54,15 +48,13 @@ interval(void)
 
 }
 
-void uart0_recvCB()
+inline void uart0_recvCB()
 {
   static uint32 serRxLen = 0;
   static uint8 phase = 0;
   static uint8 which = 0;
   uint8 byte = 0;
-  uint8 i;
-
-  char dbg_text[120];
+  uint8 i, err;
 
   while (READ_PERI_REG(UART_STATUS(0)) & (UART_RXFIFO_CNT << UART_RXFIFO_CNT_S))
   {
@@ -111,17 +103,12 @@ void uart0_recvCB()
         // Check if we have somewhere to send this data
         if (pespconn == NULL) { // Nope
           phase = 0;
-          user_print("No client, dumping packet\r\n");
+          user_print("NCDP\r\n");
           break;
         }
         else
         {
-          // Select buffer to write into
-          for (which = 0; which < NUM_RTX_BUFS; ++which)
-          {
-            if (rtxbs[which].state == BUF_IDLE) break;
-          }
-          if (which == NUM_RTX_BUFS) // No available buffer
+          if (rtxbs[which].queued)
           {
             user_print("NBADP\r\n");
             phase = 0;
@@ -130,7 +117,6 @@ void uart0_recvCB()
           else
           {
             rtxbs[which].len = 0;
-            rtxbs[which].state = BUF_WR;
             phase++;
           }
         }
@@ -138,22 +124,19 @@ void uart0_recvCB()
       }
       case 7:
       {
-        //os_sprintf(dbg_text, "URX: 0x%02x len=%d\r\n", byte, rtxbs[which].len);
-        //user_print(dbg_text);
-
         rtxbs[which].data[rtxbs[which].len++] = byte;
         if (rtxbs[which].len >= serRxLen)
         {
-          for(i=0; i<NUM_RTX_BUFS; ++i)
+          err = espconn_sent(pespconn, rtxbs[which].data, rtxbs[which].len);
+          if (err == ESPCONN_OK)
           {
-            if (rtxQ[i] == NULL) {
-              rtxQ[i] = &(rtxbs[which]);
-              break;
-            }
+            rtxbs[which].queued = true;
+            which = (which + 1) % NUM_RTX_BUFS;
           }
-          rtxbs[which].state = BUF_RD;
-          espconn_sent(pespconn, rtxbs[which].data, rtxbs[which].len);
-          //user_print("Queuing UDP packet for send\r\n");
+          else
+          {
+            os_sprintf(dbg_text, "espconn err %d\r\n", err);
+          }
           phase = 0;
         }
         break;
@@ -169,19 +152,11 @@ void uart0_recvCB()
 
 static void udpserver_sent_cb(void* arg)
 {
-  uint8 i;
+  static u8 which = 0;
 
-  //user_print("udp sent CB\r\n");
+  rtxbs[which].queued = false;
+  which = (which + 1) % NUM_RTX_BUFS;
 
-  if (rtxQ[0] != NULL)
-  {
-    rtxQ[0]->len = 0;
-    rtxQ[0]->state = BUF_IDLE;
-    for (i=1; i<NUM_RTX_BUFS; ++i)
-    {
-      rtxQ[i-1] = rtxQ[i];
-    }
-  }
   // Else handle error
 }
 
@@ -211,8 +186,7 @@ user_init()
     for (i=0; i<NUM_RTX_BUFS; ++i)
     {
       rtxbs[i].len = 0;
-      rtxbs[i].state = BUF_IDLE;
-      rtxQ[i] = NULL;
+      rtxbs[i].queued = false;
     }
 
     //uart_div_modify(0, UART_CLK_FREQ / 3000000);

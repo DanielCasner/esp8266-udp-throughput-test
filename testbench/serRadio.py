@@ -52,7 +52,7 @@ class UDPClient(socket.socket):
 class Tester:
     "A class to administer testing"
 
-    SER_XMIT_LEN = 200
+    SER_XMIT_LEN = 1500
 
     def __init__(self, serial_device="/dev/ttyUSB0", udp_host="172.31.1.1", udp_port=6661, payload_length=1400):
         "Sets up the test"

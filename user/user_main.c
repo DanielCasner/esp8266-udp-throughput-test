@@ -54,8 +54,7 @@ interval(void)
 
 }
 
-void ICACHE_FLASH_ATTR
-uart0_recvCB()
+void uart0_recvCB()
 {
   static uint32 serRxLen = 0;
   static uint8 phase = 0;

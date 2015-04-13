@@ -167,8 +167,7 @@ void uart0_recvCB()
   }
 }
 
-static void ICACHE_FLASH_ATTR
-udpserver_sent_cb(void* arg)
+static void udpserver_sent_cb(void* arg)
 {
   uint8 i;
 
@@ -187,8 +186,7 @@ udpserver_sent_cb(void* arg)
 }
 
 //Called when new packet comes in.
-static void ICACHE_FLASH_ATTR
-udpserver_recv(void *arg, char *pusrdata, unsigned short len)
+static void udpserver_recv(void *arg, char *pusrdata, unsigned short len)
 {
   char err = 0;
   pespconn = (struct espconn *)arg;

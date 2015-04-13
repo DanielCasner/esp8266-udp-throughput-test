@@ -61,6 +61,12 @@ class Tester:
         self.pktGen = PacketGenerator(payload_length)
         self.pktLog = {}
 
+    def __del__(self):
+        "Close up shop"
+        self.client.close()
+        self.uart.close()
+        del self.uart
+
     def connect(self):
         "Start UDP \"connection\""
         self.client.connect()

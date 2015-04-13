@@ -18,7 +18,7 @@ static volatile os_timer_t userTimer;
 static struct espconn *pUdpServer;
 struct espconn *pespconn = NULL;
 
-#define NUM_RTX_BUFS 2
+#define NUM_RTX_BUFS 4
 #define MTU 1500
 
 typedef enum
@@ -123,7 +123,7 @@ void uart0_recvCB()
           }
           if (which == NUM_RTX_BUFS) // No available buffer
           {
-            user_print("No available buffer, dumping packet\r\n");
+            user_print("NBADP\r\n");
             phase = 0;
             break;
           }

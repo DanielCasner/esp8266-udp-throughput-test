@@ -84,24 +84,7 @@ uart1_tx_one_char(uint8 TxChar)
 	return OK;
 }
 
-/******************************************************************************
- * FunctionName : uart1_write_char
- * Description  : Internal used function
- *                Do some special deal while tx char is '\r' or '\n'
- * Parameters   : char c - character to tx
- * Returns      : NONE
-*******************************************************************************/
-LOCAL void ICACHE_FLASH_ATTR
-uart1_write_char(char c)
-{
-    if (c == '\n') {
-        uart1_tx_one_char('\r');
-        uart1_tx_one_char('\n');
-    } else if (c == '\r') {
-    } else {
-        uart1_tx_one_char(c);
-    }
-}
+#define uart1_write_char uart1_tx_one_char
 
 extern void uart0_recvCB(void);
 

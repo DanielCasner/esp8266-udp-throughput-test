@@ -10,7 +10,7 @@ SRCS:=user/user_main.c driver/uart.c
 GCC_FOLDER:=/home/dc/esp8266/xtensa-toolchain-build/build-lx106
 ESPTOOL_PY:=../esptool/esptool.py
 FW_TOOL:=/home/dc/esp8266/other/esptool/esptool
-SDK:=/home/dc/esp8266/esp_iot_sdk_v1.0.1_b1
+SDK:=/home/dc/esp8266/esp_iot_sdk_v1.0.1_b2
 PORT:=com11
 BAUD:=230400
 

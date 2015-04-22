@@ -200,11 +200,10 @@ user_init()
     struct softap_config ap_config;
 
     os_strcpy(ap_config.ssid, "AnkiEspressif");
-
-    os_strcpy(ap_config.password, "2manysecrets");
+    os_strcpy(ap_config.password, "");
     ap_config.ssid_len = 0;
     ap_config.channel = 7;
-    ap_config.authmode = AUTH_WPA2_PSK;
+    ap_config.authmode = AUTH_OPEN;
     ap_config.max_connection = 4;
 
     // Setup ESP module to AP mode and apply settings
@@ -254,7 +253,7 @@ user_init()
     espconn_create( pUdpServer );
     pUdpServer->type = ESPCONN_UDP;
     pUdpServer->proto.udp = (esp_udp *)os_zalloc(sizeof(esp_udp));
-    pUdpServer->proto.udp->local_port = 6661;
+    pUdpServer->proto.udp->local_port = 5551;
     espconn_regist_recvcb(pUdpServer, udpserver_recv);
 
     wifi_station_dhcpc_start();

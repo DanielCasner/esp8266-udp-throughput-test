@@ -1,64 +1,121 @@
-all : image.elf
-FW_FILE_1:=0x00000.bin
-FW_FILE_2:=0x40000.bin
+#############################################################
+# Required variables for each makefile
+# Discard this section from all parent makefiles
+# Expected variables (with automatic defaults):
+#   CSRCS (all "C" files in the dir)
+#   SUBDIRS (all subdirs with a Makefile)
+#   GEN_LIBS - list of libs to be generated ()
+#   GEN_IMAGES - list of object file images to be generated ()
+#   GEN_BINS - list of binaries to be generated ()
+#   COMPONENTS_xxx - a list of libs/objs in the form
+#     subdir/lib to be extracted and rolled up into
+#     a generated lib/image xxx.a ()
+#
+TARGET = eagle
+#FLAVOR = release
+FLAVOR = debug
 
-TARGET_OUT:=image.elf
-OBJS:=user/user_main.o driver/uart.o
+#EXTRA_CCFLAGS += -u
 
-SRCS:=user/user_main.c driver/uart.c
+ifndef PDIR # {
+GEN_IMAGES= eagle.app.v6.out
+GEN_BINS= eagle.app.v6.bin
+SPECIAL_MKTARGETS=$(APP_MKTARGETS)
+SUBDIRS=user driver
 
-GCC_FOLDER:=/home/dc/esp8266/xtensa-toolchain-build/build-lx106
-ESPTOOL_PY:=../esptool/esptool.py
-FW_TOOL:=/home/dc/esp8266/other/esptool/esptool
-SDK:=/home/dc/esp8266/esp_iot_sdk_v1.0.1_b2
-PORT:=com11
-BAUD:=230400
+endif # } PDIR
 
-XTLIB:=$(SDK)/lib
-XTGCCLIB:=$(GCC_FOLDER)/gcc-4.9.1-elf/xtensa-lx106-elf/libgcc/libgcc.a
-FOLDERPREFIX:=$(GCC_FOLDER)/root/bin
-PREFIX:=$(FOLDERPREFIX)/xtensa-lx106-elf-
-CC:=$(PREFIX)gcc
+APPDIR = .
+LDDIR = ../ld
 
-CFLAGS:=-mlongcalls -I$(SDK)/include -Imyclib -Iinclude -Iuser -Os -I$(SDK)/include/
+CCFLAGS += -Os
 
-LDFLAGS_CORE:=\
-	-nostdlib \
-	-Wl,--relax -Wl,--gc-sections \
-	-L$(XTLIB) \
-	-L$(XTGCCLIB) \
-	$(SDK)/lib/liblwip.a \
-	$(SDK)/lib/libssl.a \
-	$(SDK)/lib/libupgrade.a \
-	$(SDK)/lib/libnet80211.a \
-	$(SDK)/lib/liblwip.a \
-	$(SDK)/lib/libwpa.a \
-	$(SDK)/lib/libnet80211.a \
-	$(SDK)/lib/libphy.a \
-	$(SDK)/lib/libmain.a \
-	$(SDK)/lib/libpp.a \
-	$(XTGCCLIB) \
-	-T $(SDK)/ld/eagle.app.v6.ld
+TARGET_LDFLAGS =		\
+	-nostdlib		\
+	-Wl,-EL \
+	--longcalls \
+	--text-section-literals
 
-LINKFLAGS:= \
-	$(LDFLAGS_CORE) \
-	-B$(XTLIB)
+ifeq ($(FLAVOR),debug)
+    TARGET_LDFLAGS += -g -O2
+endif
 
-$(TARGET_OUT) : $(SRCS)
-	$(PREFIX)gcc $(CFLAGS) $^  -flto $(LINKFLAGS) -o $@
+ifeq ($(FLAVOR),release)
+    TARGET_LDFLAGS += -g -O0
+endif
 
-$(FW_FILE_1): $(TARGET_OUT)
-	@echo "FW $@"
-	$(FW_TOOL) -eo $(TARGET_OUT) -bo $@ -bs .text -bs .data -bs .rodata -bc -ec
+COMPONENTS_eagle.app.v6 = user/libuser.a driver/libdriver.a
 
-$(FW_FILE_2): $(TARGET_OUT)
-	@echo "FW $@"
-	$(FW_TOOL) -eo $(TARGET_OUT) -es .irom0.text $@ -ec
+LINKFLAGS_eagle.app.v6 = \
+	-L../lib        \
+	-nostdlib	\
+    -T$(LD_FILE)   \
+	-Wl,--no-check-sections	\
+    -u call_user_start	\
+	-Wl,-static						\
+	-Wl,--start-group					\
+	-lc					\
+	-lgcc					\
+	-lhal					\
+	-lphy	\
+	-lpp	\
+	-lnet80211	\
+	-llwip	\
+	-lwpa	\
+	-lmain	\
+	-ljson	\
+	-lupgrade\
+	-lssl	\
+	-lpwm	\
+	-lsmartconfig \
+	$(DEP_LIBS_eagle.app.v6)					\
+	-Wl,--end-group
 
-build : $(FW_FILE_1) $(FW_FILE_2)
+DEPENDS_eagle.app.v6 = \
+                $(LD_FILE) \
+                $(LDDIR)/eagle.rom.addr.v6.ld
 
-burn :
-	($(ESPTOOL_PY) --port $(PORT) --baud $(BAUD) write_flash 0x00000 0x00000.bin 0x40000 0x40000.bin)||(true)
+#############################################################
+# Configuration i.e. compile options etc.
+# Target specific stuff (defines etc.) goes in here!
+# Generally values applying to a tree are captured in the
+#   makefile at its root level - these are then overridden
+#   for a subtree within the makefile rooted therein
+#
 
-clean :
-	rm -rf user/*.o driver/*.o $(TARGET_OUT) $(FW_FILE_1) $(FW_FILE_2)
+#UNIVERSAL_TARGET_DEFINES =		\
+
+# Other potential configuration flags include:
+#	-DTXRX_TXBUF_DEBUG
+#	-DTXRX_RXBUF_DEBUG
+#	-DWLAN_CONFIG_CCX
+CONFIGURATION_DEFINES =	-DICACHE_FLASH
+
+DEFINES +=				\
+	$(UNIVERSAL_TARGET_DEFINES)	\
+	$(CONFIGURATION_DEFINES)
+
+DDEFINES +=				\
+	$(UNIVERSAL_TARGET_DEFINES)	\
+	$(CONFIGURATION_DEFINES)
+
+
+#############################################################
+# Recursion Magic - Don't touch this!!
+#
+# Each subtree potentially has an include directory
+#   corresponding to the common APIs applicable to modules
+#   rooted at that subtree. Accordingly, the INCLUDE PATH
+#   of a module can only contain the include directories up
+#   its parent path, and not its siblings
+#
+# Required for each makefile to inherit from the parent
+#
+
+INCLUDES := $(INCLUDES) -I $(PDIR)include
+PDIR := ../$(PDIR)
+sinclude $(PDIR)Makefile
+
+.PHONY: FORCE
+FORCE:
+

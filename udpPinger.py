@@ -17,7 +17,12 @@ s.settimeout(interval)
 
 try:
     while True:
-        s.sendto(b"\xa5"*size, ("172.31.1.1", 5551))
+        try:
+            s.sendto(b"\xa5"*size, ("172.31.1.1", 5551))
+        except socket.timeout:
+            sys.stdout.write("Send error\r\n")
+            time.sleep(interval)
+            continue
         tick = time.time()
         try:
             r, a = s.recvfrom(1500)
